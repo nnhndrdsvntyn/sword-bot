@@ -13,7 +13,7 @@ app.listen(port, () => {
 const io = require("socket.io-client");
 
 const servers = ["na-7", "na-2", "na-3", "na-4", "na-5", "na-6"];
-const botsPerServer = 30;
+const botsPerServer = 100;
 const autoRespawn = true;
 const autoAttack = true;
 
@@ -126,8 +126,8 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    // Only auto respawn if pausedTimer is 5 AND level, .h >= 31
-    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 31) {
+    // Only auto respawn if pausedTimer is 5 AND level, .h >= 1
+    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 1) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
