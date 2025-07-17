@@ -30,11 +30,9 @@ function moveToward(bot, targetX, targetY, p) {
     if (obs.type !== 1 && obs.type !== 3) continue;
     const size = obs.type === 1 ? 215 : 165;
     const avoidRadius = size + 40;
-
     const distX = obs.x - p.b;
     const distY = obs.y - p.c;
     const distSq = distX * distX + distY * distY;
-
     if (distSq <= avoidRadius * avoidRadius) {
       const obsAngle = Math.atan2(distY, distX);
       const angleDiff = angle - obsAngle;
@@ -54,71 +52,85 @@ function moveToward(bot, targetX, targetY, p) {
 const bots = [];
 const roamData = [];
 
+function connectBot(server, index) {
+  const botName = `${server.toUpperCase()} BOT #${index}`;
+  const bot = {
+    server,
+    name: botName,
+    list: {
+      players: {},
+      npcs: {},
+      mobs: {},
+      decorations: {},
+    },
+    hasInit: false,
+    bonusXPTimer: 20,
+  };
+
+  bots.push(bot);
+
+  roamData.push({
+    bot,
+    x: Math.random() * 10000,
+    y: Math.random() * 10000,
+    nextChangeTime: Date.now() + 6000 + Math.random() * 4000,
+  });
+
+  const socket = io(`https://${server}.swordonline.io`, { reconnection: true });
+
+  bot.socket = socket;
+
+  socket.on("connect", () => {
+    socket.emit("gameModeReceived", { status: true });
+  });
+
+  socket.on("init", (data) => {
+    bot.list.decorations = data.decoration;
+    bot.hasInit = true;
+  });
+
+  socket.on("update", (data) => {
+    const newPlayers = {};
+    for (const obj of data.player) {
+      const id = obj.a;
+      const oldPausedTimer = bot.list.players[id]?.pausedTimer ?? 0;
+      obj.pausedTimer = obj.g === 1 ? 0 : oldPausedTimer;
+      newPlayers[id] = obj;
+    }
+
+    bot.list.players = newPlayers;
+    bot.list.npcs = Object.fromEntries(data.npc.map((obj) => [obj.a, obj]));
+    bot.list.mobs = Object.fromEntries(data.mob.map((obj) => [obj.a, obj]));
+  });
+
+  socket.on("disconnect", () => {
+    const i = bots.indexOf(bot);
+    if (i !== -1) {
+      bots.splice(i, 1);
+      roamData.splice(i, 1);
+    }
+    setTimeout(() => {
+      connectBot(server, index);
+    }, 2000);
+  });
+
+  setInterval(() => {
+    for (const id in bot.list.players) {
+      const player = bot.list.players[id];
+      if (!player) continue;
+      if (player.g === 0 && player.pausedTimer < 5) {
+        player.pausedTimer++;
+      }
+    }
+  }, 1000);
+}
+
 servers.forEach((server) => {
   for (let i = 1; i <= botsPerServer; i++) {
-    const botName = `${server.toUpperCase()} BOT #${i}`;
-    const bot = {
-      server,
-      name: botName,
-      list: {
-        players: {},
-        npcs: {},
-        mobs: {},
-        decorations: {},
-      },
-      hasInit: false,
-      bonusXPTimer: 20, // start at 20 as requested
-    };
-
-    bots.push(bot);
-
-    roamData.push({
-      bot,
-      x: Math.random() * 10000,
-      y: Math.random() * 10000,
-      nextChangeTime: Date.now() + 6000 + Math.random() * 4000,
-    });
-
-    bot.socket = io(`https://${server}.swordonline.io`);
-
-    bot.socket.on("connect", () => {
-      bot.socket.emit("gameModeReceived", { status: true });
-    });
-
-    bot.socket.on("init", (data) => {
-      if (!bot.hasInit) {
-        bot.list.decorations = data.decoration;
-        bot.hasInit = true;
-      }
-    });
-
-    bot.socket.on("update", (data) => {
-      const newPlayers = {};
-      for (const obj of data.player) {
-        const id = obj.a;
-        const oldPausedTimer = bot.list.players[id]?.pausedTimer ?? 0;
-        obj.pausedTimer = obj.g === 1 ? 0 : oldPausedTimer;
-        newPlayers[id] = obj;
-      }
-
-      bot.list.players = newPlayers;
-      bot.list.npcs = Object.fromEntries(data.npc.map((obj) => [obj.a, obj]));
-      bot.list.mobs = Object.fromEntries(data.mob.map((obj) => [obj.a, obj]));
-    });
-
-    setInterval(() => {
-      for (const id in bot.list.players) {
-        const player = bot.list.players[id];
-        if (!player) continue;
-        if (player.g === 0 && player.pausedTimer < 5) {
-          player.pausedTimer++;
-        }
-      }
-    }, 1000);
+    connectBot(server, i);
   }
 });
 
-// Auto respawn with score check
 setInterval(() => {
   if (!autoRespawn) return;
 
@@ -126,7 +138,6 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    // Only auto respawn if pausedTimer is 5 AND score, .e >= 100
     if (localPlayer.pausedTimer === 5 && localPlayer.e >= 100) {
       bot.socket.emit("signInY", { username: bot.name });
     }
@@ -143,7 +154,6 @@ setInterval(() => {
     const self = bot.list.players[bot.socket.id];
     if (!self) continue;
 
-    // Handle bonus XP timer per bot
     if (bot.bonusXPTimer >= 20) {
       if (self.g === 0) {
         getbonusXP(bot.socket);
@@ -223,7 +233,6 @@ setInterval(() => {
             if (i === j) continue;
             const other = roamData[j];
             if (other.bot.server !== bot.server) continue;
-
             const dx = newX - other.x;
             const dy = newY - other.y;
             if (dx * dx + dy * dy < 100 * 100) {
@@ -249,7 +258,6 @@ setInterval(() => {
   }
 }, 250);
 
-// The requested getbonusXP function (per bot socket)
 function getbonusXP(socket) {
   socket.emit("extraBonus", { status: true });
   setTimeout(() => {
