@@ -12,10 +12,14 @@ app.listen(port, () => {
 
 const io = require("socket.io-client");
 
-const servers = ["na-3"];
+const servers = ["na-7"];
 const botsPerServer = 75;
 const autoRespawn = true;
 const autoAttack = true;
+
+function getSwingDistance(h) {
+  return h < 1 ? 150 : h > 35 ? 245 : 150 + (h - 1) * 10;
+}
 
 function moveToward(bot, targetX, targetY, p) {
   let dx = targetX - p.b;
@@ -50,17 +54,9 @@ function moveToward(bot, targetX, targetY, p) {
 const bots = [];
 const roamData = [];
 
-const chatMessages = [
-  "FREE XP!!!!",
-  "KILL ME FOR XP!! 🤑",
-  "EZ LEVELS! 📈",
-  "KILL ME, ${dValue}",
-  "MADE BY LIBERATION",
-];
-
 servers.forEach((server) => {
   for (let i = 1; i <= botsPerServer; i++) {
-    botName = `${server.toUpperCase()} FREE XP!`;
+    const botName = `${server.toUpperCase()} BOT #${i}`;
     const bot = {
       server,
       name: botName,
@@ -71,10 +67,7 @@ servers.forEach((server) => {
         decorations: {},
       },
       hasInit: false,
-      bonusXPTimer: 20,
-      messageCooldown: 0,
-      lastMessageTime: 0,
-      currentMessage: "",
+      bonusXPTimer: 20, // start at 20 as requested
     };
 
     bots.push(bot);
@@ -109,8 +102,8 @@ servers.forEach((server) => {
       }
 
       bot.list.players = newPlayers;
-      bot.list.npcs = {}; // no npc tracking
-      bot.list.mobs = {};
+      bot.list.npcs = Object.fromEntries(data.npc.map((obj) => [obj.a, obj]));
+      bot.list.mobs = Object.fromEntries(data.mob.map((obj) => [obj.a, obj]));
     });
 
     setInterval(() => {
@@ -125,6 +118,7 @@ servers.forEach((server) => {
   }
 });
 
+// Auto respawn with score check
 setInterval(() => {
   if (!autoRespawn) return;
 
@@ -132,7 +126,8 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    if (localPlayer.pausedTimer === 5 && localPlayer.e >= 500_000) {
+    // Only auto respawn if pausedTimer is 5 AND score, .e >= 100
+    if (localPlayer.pausedTimer === 5 && localPlayer.e >= 100) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
@@ -148,6 +143,7 @@ setInterval(() => {
     const self = bot.list.players[bot.socket.id];
     if (!self) continue;
 
+    // Handle bonus XP timer per bot
     if (bot.bonusXPTimer >= 20) {
       if (self.g === 0) {
         getbonusXP(bot.socket);
@@ -159,39 +155,59 @@ setInterval(() => {
 
     let closest = null;
     let minDistSq = Infinity;
+    let isPlayerTarget = false;
 
-    for (const player of Object.values(bot.list.players)) {
-      if (player.a === bot.socket.id) continue;
-      if (allBotIds.has(player.a)) continue;
+    for (const otherBot of bots) {
+      if (otherBot.server !== bot.server) continue;
 
-      const dx = player.b - self.b;
-      const dy = player.c - self.c;
-      const distSq = dx * dx + dy * dy;
-      if (distSq < minDistSq) {
-        minDistSq = distSq;
-        closest = player;
+      for (const npc of Object.values(otherBot.list.npcs)) {
+        const dx = npc.b - self.b;
+        const dy = npc.c - self.c;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq) {
+          minDistSq = distSq;
+          closest = npc;
+          isPlayerTarget = false;
+        }
+      }
+
+      for (const player of Object.values(otherBot.list.players)) {
+        if (player.a === bot.socket.id) continue;
+        if (allBotIds.has(player.a)) continue;
+        const dx = player.b - self.b;
+        const dy = player.c - self.c;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq) {
+          minDistSq = distSq;
+          closest = player;
+          isPlayerTarget = true;
+        }
       }
     }
 
-    const now = Date.now();
+    const swingDistance = getSwingDistance(self.h);
+    const swingRangeSq = swingDistance * swingDistance;
 
     if (closest) {
       moveToward(bot, closest.b, closest.c, self);
 
-      if (now - bot.lastMessageTime > bot.messageCooldown) {
-        const messageTemplate =
-          chatMessages[Math.floor(Math.random() * chatMessages.length)];
+      if (isPlayerTarget) {
         const dValue = closest.d || "";
-        bot.currentMessage = messageTemplate.replace("${dValue}", dValue);
-
         bot.socket.emit("keyPressX", {
           inputId: "chatMessage",
-          state: bot.currentMessage,
+          state: `🎯: ${dValue}`,
         });
-
-        bot.lastMessageTime = now;
-        bot.messageCooldown = 2000 + Math.floor(Math.random() * 3000); // 2–5 sec
+      } else {
+        bot.socket.emit("keyPressX", {
+          inputId: "chatMessage",
+          state: "",
+        });
       }
+
+      bot.socket.emit("keyPressX", {
+        inputId: "leftButton",
+        state: minDistSq <= swingRangeSq ? 1 : 0,
+      });
     } else {
       const roam = roamData[i];
       const now = Date.now();
@@ -228,10 +244,12 @@ setInterval(() => {
       });
 
       moveToward(bot, roam.x, roam.y, self);
+      bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
     }
   }
 }, 250);
 
+// The requested getbonusXP function (per bot socket)
 function getbonusXP(socket) {
   socket.emit("extraBonus", { status: true });
   setTimeout(() => {
