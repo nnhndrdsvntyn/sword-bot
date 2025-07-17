@@ -22,6 +22,8 @@ function getSwingDistance(h) {
 }
 
 function moveToward(bot, targetX, targetY, p) {
+  if (!bot.list?.decorations) return;
+
   let dx = targetX - p.b;
   let dy = targetY - p.c;
   let angle = Math.atan2(dy, dx);
@@ -30,9 +32,11 @@ function moveToward(bot, targetX, targetY, p) {
     if (obs.type !== 1 && obs.type !== 3) continue;
     const size = obs.type === 1 ? 215 : 165;
     const avoidRadius = size + 40;
+
     const distX = obs.x - p.b;
     const distY = obs.y - p.c;
     const distSq = distX * distX + distY * distY;
+
     if (distSq <= avoidRadius * avoidRadius) {
       const obsAngle = Math.atan2(distY, distX);
       const angleDiff = angle - obsAngle;
@@ -85,7 +89,7 @@ function connectBot(server, index) {
   });
 
   socket.on("init", (data) => {
-    bot.list.decorations = data.decoration;
+    bot.list.decorations = data.decoration || {};
     bot.hasInit = true;
   });
 
@@ -109,9 +113,7 @@ function connectBot(server, index) {
       bots.splice(i, 1);
       roamData.splice(i, 1);
     }
-    setTimeout(() => {
-      connectBot(server, index);
-    }, 2000);
+    setTimeout(() => connectBot(server, index), 2000);
   });
 
   setInterval(() => {
@@ -233,6 +235,7 @@ setInterval(() => {
             if (i === j) continue;
             const other = roamData[j];
             if (other.bot.server !== bot.server) continue;
+
             const dx = newX - other.x;
             const dy = newY - other.y;
             if (dx * dx + dy * dy < 100 * 100) {
