@@ -22,8 +22,6 @@ function getSwingDistance(h) {
 }
 
 function moveToward(bot, targetX, targetY, p) {
-  if (!bot.list?.decorations) return;
-
   let dx = targetX - p.b;
   let dy = targetY - p.c;
   let angle = Math.atan2(dy, dx);
@@ -56,7 +54,7 @@ function moveToward(bot, targetX, targetY, p) {
 const bots = [];
 const roamData = [];
 
-function connectBot(server, index) {
+function createBot(server, index) {
   const botName = `${server.toUpperCase()} BOT #${index}`;
   const bot = {
     server,
@@ -73,15 +71,16 @@ function connectBot(server, index) {
 
   bots.push(bot);
 
-  roamData.push({
+  const roam = {
     bot,
     x: Math.random() * 10000,
     y: Math.random() * 10000,
     nextChangeTime: Date.now() + 6000 + Math.random() * 4000,
-  });
+  };
 
-  const socket = io(`https://${server}.swordonline.io`, { reconnection: true });
+  roamData.push(roam);
 
+  const socket = io(`https://${server}.swordonline.io`);
   bot.socket = socket;
 
   socket.on("connect", () => {
@@ -89,8 +88,10 @@ function connectBot(server, index) {
   });
 
   socket.on("init", (data) => {
-    bot.list.decorations = data.decoration || {};
-    bot.hasInit = true;
+    if (!bot.hasInit) {
+      bot.list.decorations = data.decoration;
+      bot.hasInit = true;
+    }
   });
 
   socket.on("update", (data) => {
@@ -108,12 +109,19 @@ function connectBot(server, index) {
   });
 
   socket.on("disconnect", () => {
-    const i = bots.indexOf(bot);
-    if (i !== -1) {
-      bots.splice(i, 1);
-      roamData.splice(i, 1);
+    const botIndex = bots.indexOf(bot);
+    if (botIndex !== -1) {
+      bots.splice(botIndex, 1);
     }
-    setTimeout(() => connectBot(server, index), 2000);
+
+    const roamIndex = roamData.findIndex((r) => r.bot === bot);
+    if (roamIndex !== -1) {
+      roamData.splice(roamIndex, 1);
+    }
+
+    setTimeout(() => {
+      createBot(server, index); // reconnect bot
+    }, 3000); // wait 3s before reconnecting
   });
 
   setInterval(() => {
@@ -129,7 +137,7 @@ function connectBot(server, index) {
 
 servers.forEach((server) => {
   for (let i = 1; i <= botsPerServer; i++) {
-    connectBot(server, i);
+    createBot(server, i);
   }
 });
 
