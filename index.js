@@ -126,8 +126,8 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    // Only auto respawn if pausedTimer is 5 AND level, .h >= 1
-    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 1) {
+    // Only auto respawn if pausedTimer is 5 AND level, .h >= 31
+    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 31) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
