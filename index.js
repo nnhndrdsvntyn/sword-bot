@@ -12,8 +12,8 @@ app.listen(port, () => {
 
 const io = require("socket.io-client");
 
-const servers = ["na-3"];
-const botsPerServer = 75;
+const servers = ["na-7", "na-2", "na-3", "na-4", "na-5", "na-6"];
+const botsPerServer = 30;
 const autoRespawn = true;
 const autoAttack = true;
 
@@ -126,8 +126,8 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    // Only auto respawn if pausedTimer is 5 AND level, .h >= 2
-    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 2) {
+    // Only auto respawn if pausedTimer is 5 AND level, .h >= 31
+    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 31) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
@@ -247,7 +247,7 @@ setInterval(() => {
       bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
     }
   }
-}, 250);
+}, 100);
 
 // The requested getbonusXP function (per bot socket)
 function getbonusXP(socket) {
