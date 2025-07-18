@@ -13,7 +13,7 @@ app.listen(port, () => {
 const io = require("socket.io-client");
 
 const servers = ["na-3"];
-const botsPerServer = 75;
+const botsPerServer = 100;
 const autoRespawn = true;
 const autoAttack = true;
 
@@ -88,7 +88,7 @@ function lineIntersectsCircle(x1, y1, x2, y2, cx, cy, r) {
   const distX = closestX - cx;
   const distY = closestY - cy;
 
-  return (distX * distX + distY * distY) <= r * r;
+  return distX * distX + distY * distY <= r * r;
 }
 
 const bots = [];
@@ -254,7 +254,13 @@ setInterval(() => {
         state: isPlayerTarget ? `🎯: ${closest.d || ""}` : "",
       });
 
-      const inLineOfSight = hasLineOfSight(bot, self.b, self.c, closest.b, closest.c);
+      const inLineOfSight = hasLineOfSight(
+        bot,
+        self.b,
+        self.c,
+        closest.b,
+        closest.c,
+      );
 
       bot.socket.emit("keyPressX", {
         inputId: "leftButton",
@@ -299,7 +305,7 @@ setInterval(() => {
       bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
     }
   }
-}, 1000 / 60); // 60 FPS
+}, 1000 / 30); // 30 FPS
 
 function getbonusXP(socket) {
   socket.emit("extraBonus", { status: true });
