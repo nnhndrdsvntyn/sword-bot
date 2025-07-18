@@ -12,7 +12,7 @@ app.listen(port, () => {
 
 const io = require("socket.io-client");
 
-const servers = ["na-7"];
+const servers = ["na-3"];
 const botsPerServer = 75;
 const autoRespawn = true;
 const autoAttack = true;
