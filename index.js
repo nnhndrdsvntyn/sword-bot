@@ -299,7 +299,7 @@ setInterval(() => {
       bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
     }
   }
-}, 250);
+}, 1000 / 60); // 60 FPS
 
 function getbonusXP(socket) {
   socket.emit("extraBonus", { status: true });
