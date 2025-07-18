@@ -25,6 +25,7 @@ function moveToward(bot, targetX, targetY, p) {
   let dx = targetX - p.b;
   let dy = targetY - p.c;
   let angle = Math.atan2(dy, dx);
+  let adjusted = false;
 
   for (const obs of Object.values(bot.list.decorations)) {
     if (obs.type !== 1 && obs.type !== 3) continue;
@@ -40,8 +41,16 @@ function moveToward(bot, targetX, targetY, p) {
       const angleDiff = angle - obsAngle;
       const turnDir = angleDiff > 0 ? 1 : -1;
       angle += turnDir * 2;
+      adjusted = true;
+      break;
     }
   }
+
+  if (!adjusted) {
+    bot.turningOffset = 0;
+  }
+
+  angle += bot.turningOffset || 0;
 
   let degrees = (angle * 180) / Math.PI;
   if (degrees < 0) degrees += 360;
@@ -49,6 +58,37 @@ function moveToward(bot, targetX, targetY, p) {
   bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
   bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
   bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 });
+}
+
+function hasLineOfSight(bot, fromX, fromY, toX, toY) {
+  for (const obs of Object.values(bot.list.decorations)) {
+    if (obs.type !== 1 && obs.type !== 3) continue;
+
+    const radius = obs.type === 1 ? 215 : 165;
+    if (lineIntersectsCircle(fromX, fromY, toX, toY, obs.x, obs.y, radius)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function lineIntersectsCircle(x1, y1, x2, y2, cx, cy, r) {
+  const acX = cx - x1;
+  const acY = cy - y1;
+  const abX = x2 - x1;
+  const abY = y2 - y1;
+
+  const abSq = abX * abX + abY * abY;
+  const ac_ab = acX * abX + acY * abY;
+  const t = Math.max(0, Math.min(1, ac_ab / abSq));
+
+  const closestX = x1 + abX * t;
+  const closestY = y1 + abY * t;
+
+  const distX = closestX - cx;
+  const distY = closestY - cy;
+
+  return (distX * distX + distY * distY) <= r * r;
 }
 
 const bots = [];
@@ -67,6 +107,7 @@ function createBot(server, index) {
     },
     hasInit: false,
     bonusXPTimer: 20,
+    turningOffset: 0,
   };
 
   bots.push(bot);
@@ -110,18 +151,14 @@ function createBot(server, index) {
 
   socket.on("disconnect", () => {
     const botIndex = bots.indexOf(bot);
-    if (botIndex !== -1) {
-      bots.splice(botIndex, 1);
-    }
+    if (botIndex !== -1) bots.splice(botIndex, 1);
 
     const roamIndex = roamData.findIndex((r) => r.bot === bot);
-    if (roamIndex !== -1) {
-      roamData.splice(roamIndex, 1);
-    }
+    if (roamIndex !== -1) roamData.splice(roamIndex, 1);
 
     setTimeout(() => {
-      createBot(server, index); // reconnect bot
-    }, 3000); // wait 3s before reconnecting
+      createBot(server, index);
+    }, 3000);
   });
 
   setInterval(() => {
@@ -194,6 +231,7 @@ setInterval(() => {
       for (const player of Object.values(otherBot.list.players)) {
         if (player.a === bot.socket.id) continue;
         if (allBotIds.has(player.a)) continue;
+
         const dx = player.b - self.b;
         const dy = player.c - self.c;
         const distSq = dx * dx + dy * dy;
@@ -211,22 +249,16 @@ setInterval(() => {
     if (closest) {
       moveToward(bot, closest.b, closest.c, self);
 
-      if (isPlayerTarget) {
-        const dValue = closest.d || "";
-        bot.socket.emit("keyPressX", {
-          inputId: "chatMessage",
-          state: `🎯: ${dValue}`,
-        });
-      } else {
-        bot.socket.emit("keyPressX", {
-          inputId: "chatMessage",
-          state: "",
-        });
-      }
+      bot.socket.emit("keyPressX", {
+        inputId: "chatMessage",
+        state: isPlayerTarget ? `🎯: ${closest.d || ""}` : "",
+      });
+
+      const inLineOfSight = hasLineOfSight(bot, self.b, self.c, closest.b, closest.c);
 
       bot.socket.emit("keyPressX", {
         inputId: "leftButton",
-        state: minDistSq <= swingRangeSq ? 1 : 0,
+        state: minDistSq <= swingRangeSq && inLineOfSight ? 1 : 0,
       });
     } else {
       const roam = roamData[i];
