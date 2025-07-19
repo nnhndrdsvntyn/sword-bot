@@ -132,7 +132,7 @@ setInterval(() => {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    if (localPlayer.pausedTimer === 5 && localPlayer.h >= 31) {
+    if (localPlayer.pausedTimer === 5 && localPlayer.e >= 500_000) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
@@ -146,3 +146,95 @@ setInterval(() => {
   for (let i = 0; i < bots.length; i++) {
     const bot = bots[i];
     const self = bot.list.players[bot.socket.id];
+    if (!self) continue;
+
+    if (bot.bonusXPTimer >= 20) {
+      if (self.g === 0) {
+        getbonusXP(bot.socket);
+      }
+      bot.bonusXPTimer = 1;
+    } else {
+      bot.bonusXPTimer++;
+    }
+
+    let closest = null;
+    let minDistSq = Infinity;
+
+    for (const player of Object.values(bot.list.players)) {
+      if (player.a === bot.socket.id) continue;
+      if (allBotIds.has(player.a)) continue;
+
+      const dx = player.b - self.b;
+      const dy = player.c - self.c;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        closest = player;
+      }
+    }
+
+    const now = Date.now();
+
+    if (closest) {
+      moveToward(bot, closest.b, closest.c, self);
+
+      if (now - bot.lastMessageTime > bot.messageCooldown) {
+        const messageTemplate =
+          chatMessages[Math.floor(Math.random() * chatMessages.length)];
+        const dValue = closest.d || "";
+        bot.currentMessage = messageTemplate.replace("${dValue}", dValue);
+
+        bot.socket.emit("keyPressX", {
+          inputId: "chatMessage",
+          state: bot.currentMessage,
+        });
+
+        bot.lastMessageTime = now;
+        bot.messageCooldown = 2000 + Math.floor(Math.random() * 3000); // 2–5 sec
+      }
+    } else {
+      const roam = roamData[i];
+      const now = Date.now();
+
+      if (now > roam.nextChangeTime) {
+        let newX, newY, valid;
+        do {
+          newX = Math.random() * 10000;
+          newY = Math.random() * 10000;
+          valid = true;
+
+          for (let j = 0; j < roamData.length; j++) {
+            if (i === j) continue;
+            const other = roamData[j];
+            if (other.bot.server !== bot.server) continue;
+
+            const dx = newX - other.x;
+            const dy = newY - other.y;
+            if (dx * dx + dy * dy < 100 * 100) {
+              valid = false;
+              break;
+            }
+          }
+        } while (!valid);
+
+        roam.x = newX;
+        roam.y = newY;
+        roam.nextChangeTime = now + 6000 + Math.random() * 4000;
+      }
+
+      bot.socket.emit("keyPressX", {
+        inputId: "chatMessage",
+        state: "👀 Looking for targets...",
+      });
+
+      moveToward(bot, roam.x, roam.y, self);
+    }
+  }
+}, 250);
+
+function getbonusXP(socket) {
+  socket.emit("extraBonus", { status: true });
+  setTimeout(() => {
+    socket.emit("extraBonus", { status: true });
+  }, 100);
+}
