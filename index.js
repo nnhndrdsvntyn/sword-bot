@@ -109,7 +109,7 @@ servers.forEach((server) => {
       }
 
       bot.list.players = newPlayers;
-      bot.list.npcs = {}; // no npc tracking
+      bot.list.npcs = {};
       bot.list.mobs = {};
     });
 
@@ -190,44 +190,55 @@ setInterval(() => {
         });
 
         bot.lastMessageTime = now;
-        bot.messageCooldown = 2000 + Math.floor(Math.random() * 3000); // 2–5 sec
+        bot.messageCooldown = 2000 + Math.floor(Math.random() * 3000);
       }
     } else {
       const roam = roamData[i];
-      const now = Date.now();
+      const dx = self.b - 5000;
+      const dy = self.c - 5000;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
 
-      if (now > roam.nextChangeTime) {
-        let newX, newY, valid;
-        do {
-          newX = Math.random() * 10000;
-          newY = Math.random() * 10000;
-          valid = true;
+      if (distFromCenter > 1000) {
+        bot.socket.emit("keyPressX", {
+          inputId: "chatMessage",
+          state: "⚡ Heading to center...",
+        });
 
-          for (let j = 0; j < roamData.length; j++) {
-            if (i === j) continue;
-            const other = roamData[j];
-            if (other.bot.server !== bot.server) continue;
+        moveToward(bot, 5000, 5000, self);
+      } else {
+        if (now > roam.nextChangeTime) {
+          let newX, newY, valid;
+          do {
+            newX = Math.random() * 10000;
+            newY = Math.random() * 10000;
+            valid = true;
 
-            const dx = newX - other.x;
-            const dy = newY - other.y;
-            if (dx * dx + dy * dy < 100 * 100) {
-              valid = false;
-              break;
+            for (let j = 0; j < roamData.length; j++) {
+              if (i === j) continue;
+              const other = roamData[j];
+              if (other.bot.server !== bot.server) continue;
+
+              const dx = newX - other.x;
+              const dy = newY - other.y;
+              if (dx * dx + dy * dy < 100 * 100) {
+                valid = false;
+                break;
+              }
             }
-          }
-        } while (!valid);
+          } while (!valid);
 
-        roam.x = newX;
-        roam.y = newY;
-        roam.nextChangeTime = now + 6000 + Math.random() * 4000;
+          roam.x = newX;
+          roam.y = newY;
+          roam.nextChangeTime = now + 6000 + Math.random() * 4000;
+        }
+
+        bot.socket.emit("keyPressX", {
+          inputId: "chatMessage",
+          state: "👀 Looking for targets...",
+        });
+
+        moveToward(bot, roam.x, roam.y, self);
       }
-
-      bot.socket.emit("keyPressX", {
-        inputId: "chatMessage",
-        state: "👀 Looking for targets...",
-      });
-
-      moveToward(bot, roam.x, roam.y, self);
     }
   }
 }, 250);
