@@ -1,5 +1,4 @@
 // FREE XP BOTS
-// DASH ALWAYS
 // SPAWN AT SCORE:
 let SPAWN_SCORE = 100;
 
@@ -19,61 +18,31 @@ app.listen(port, () => {
 
 const io = require("socket.io-client");
 
-function isBlocked(bot, self, targetX, targetY) {
+function moveSmart(bot, targetX, targetY, self) {
+  let dx = targetX - self.b;
+  let dy = targetY - self.c;
+
+  // Obstacle avoidance steering
   for (const obs of Object.values(bot.list.decorations)) {
     if (obs.type !== 1 && obs.type !== 3) continue;
 
     const size = obs.type === 1 ? 215 : 165;
-    const padding = size + 60;
+    const avoidRadius = size + 80;
 
-    const dx = obs.x - self.b;
-    const dy = obs.y - self.c;
-    const distSq = dx * dx + dy * dy;
+    const ox = obs.x - self.b;
+    const oy = obs.y - self.c;
+    const distSq = ox * ox + oy * oy;
 
-    // Check if obstacle is close enough to block vision
-    if (distSq < padding * padding) {
-      // Basic directional check: is obstacle roughly between us and the target?
-      const midX = (self.b + targetX) / 2;
-      const midY = (self.c + targetY) / 2;
-      const offsetX = Math.abs(obs.x - midX);
-      const offsetY = Math.abs(obs.y - midY);
-      if (offsetX < padding && offsetY < padding) {
-        return true;
-      }
+    if (distSq < avoidRadius * avoidRadius) {
+      const dist = Math.sqrt(distSq);
+      const push = (avoidRadius - dist) / avoidRadius;
+
+      dx -= (ox / dist) * push * 800;
+      dy -= (oy / dist) * push * 800;
     }
   }
-  return false;
-}
 
-function moveSmart(bot, targetX, targetY, self) {
-  const now = Date.now();
-
-  const blocked = isBlocked(bot, self, targetX, targetY);
-
-  if (blocked) {
-    if (!bot.dodging || bot.dodgingUntil < now) {
-      // Pick simple detour direction based on relative position
-      const dx = targetX - self.b;
-      const dy = targetY - self.c;
-      if (Math.abs(dx) > Math.abs(dy)) {
-        targetX = self.b;
-        targetY += dy > 0 ? 400 : -400;
-      } else {
-        targetX += dx > 0 ? 400 : -400;
-        targetY = self.c;
-      }
-
-      bot.dodgingUntil = now + 300;
-      bot.dodging = true;
-    }
-  } else {
-    bot.dodging = false;
-  }
-
-  // Move toward adjusted target
-  let dx = targetX - self.b;
-  let dy = targetY - self.c;
-  let angle = Math.atan2(dy, dx);
+  const angle = Math.atan2(dy, dx);
   let degrees = (angle * 180) / Math.PI;
   if (degrees < 0) degrees += 360;
 
@@ -108,8 +77,6 @@ servers.forEach((server) => {
       lastMessageTime: 0,
       currentMessage: "",
       lastTargetId: null,
-      dodging: false,
-      dodgingUntil: 0,
     };
 
     bots.push(bot);
@@ -162,7 +129,7 @@ setInterval(() => {
   }
 }, 1000);
 
-// Shared target AI + chat loop
+// Shared targeting & smooth steering loop
 setInterval(() => {
   const allBotIds = new Set(bots.map((b) => b.socket.id));
   const visiblePlayers = [];
@@ -180,9 +147,7 @@ setInterval(() => {
     if (!self) continue;
 
     if (bot.bonusXPTimer >= 20) {
-      if (self.g === 0) {
-        getbonusXP(bot.socket);
-      }
+      if (self.g === 0) getbonusXP(bot.socket);
       bot.bonusXPTimer = 1;
     } else {
       bot.bonusXPTimer++;
