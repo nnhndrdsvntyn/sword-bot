@@ -22,34 +22,56 @@ app.listen(port, () => {
 
 const io = require("socket.io-client");
 
-function moveToward(bot, targetX, targetY, p) {
-  let dx = targetX - p.b;
-  let dy = targetY - p.c;
+function moveToward(bot, targetX, targetY, self) {
+  let dx = targetX - self.b;
+  let dy = targetY - self.c;
   let angle = Math.atan2(dy, dx);
+
+  const now = Date.now();
+
+  // Avoid obstacle if needed
+  let avoiding = false;
 
   for (const obs of Object.values(bot.list.decorations)) {
     if (obs.type !== 1 && obs.type !== 3) continue;
+
     const size = obs.type === 1 ? 215 : 165;
     const avoidRadius = size + 40;
 
-    const distX = obs.x - p.b;
-    const distY = obs.y - p.c;
+    const distX = obs.x - self.b;
+    const distY = obs.y - self.c;
     const distSq = distX * distX + distY * distY;
 
     if (distSq <= avoidRadius * avoidRadius) {
-      const obsAngle = Math.atan2(distY, distX);
-      const angleDiff = angle - obsAngle;
-      const turnDir = angleDiff > 0 ? 1 : -1;
-      angle += turnDir * 2;
+      avoiding = true;
+
+      // Commit to a dodge direction based on relative angle
+      if (!bot.dodgeUntil || bot.dodgeUntil < now) {
+        const obsAngle = Math.atan2(distY, distX);
+        const angleDiff = angle - obsAngle;
+
+        const turnDir = angleDiff > 0 ? 1 : -1;
+
+        angle += turnDir * 1.8;
+        bot.dodgeUntil = now + 350; // commit to dodge for 350ms
+      } else {
+        // Still in dodge mode, don't update angle
+        return;
+      }
+
+      break;
     }
   }
 
-  let degrees = (angle * 180) / Math.PI;
-  if (degrees < 0) degrees += 360;
+  // Only update angle when not in mid-dodge or no obstacle
+  if (!avoiding || (bot.dodgeUntil && bot.dodgeUntil <= now)) {
+    let degrees = (angle * 180) / Math.PI;
+    if (degrees < 0) degrees += 360;
 
-  bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
-  bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
-  bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 }); // DASH ALWAYS
+    bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
+    bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
+    bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 }); // DASH
+  }
 }
 
 const bots = [];
@@ -80,6 +102,7 @@ servers.forEach((server) => {
       lastMessageTime: 0,
       currentMessage: "",
       lastTargetId: null,
+      dodgeUntil: 0,
     };
 
     bots.push(bot);
@@ -134,12 +157,12 @@ setInterval(() => {
   }
 }, 1000);
 
-// Main follow + shared target logic
+// Shared target + swarm follow
 setInterval(() => {
   const allBotIds = new Set(bots.map((b) => b.socket.id));
   const globalVisiblePlayers = [];
 
-  // Build shared list of visible players across all bots
+  // Shared visible players across all bots
   for (const bot of bots) {
     for (const player of Object.values(bot.list.players)) {
       if (!allBotIds.has(player.a)) {
