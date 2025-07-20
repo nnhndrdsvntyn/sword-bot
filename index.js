@@ -1,8 +1,8 @@
 // === CONFIG ===
-let BOT_Mode = "Find-Kill-NPCs-Players"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
+let BOT_Mode = "Free-XP"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
 const SPAWN_SCORE = 500_000;
-const servers = ["na-7", "na-2", "na-3", "na-5", "na-6"];
-const botsPerServer = 50;
+const servers = ["na-2"];
+const botsPerServer = 150;
 
 // === EXPRESS SERVER ===
 const express = require("express");
