@@ -5,7 +5,7 @@ let reconnect_aboveScore = true; // Reset bots if score > SPAWN_SCORE
 
 const SPAWN_SCORE = 10;
 const servers = ["na", "na-2", "na-3", "na-4", "na-5", "na-6", "na-7"];
-const botsPerServer = 50;
+const botsPerServer = 30;
 
 // === EXPRESS SERVER ===
 const express = require("express");
@@ -213,7 +213,7 @@ setInterval(() => {
         setTimeout(() => {
           createBot(bot.server, i + 1);
         }, 1000);
-      }, 100);
+      }, 500);
 
       continue;
     }
@@ -312,4 +312,4 @@ setInterval(() => {
       }
     }
   }
-}, 1000 / 30);
+}, 250);
