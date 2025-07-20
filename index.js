@@ -1,6 +1,6 @@
 // FREE XP BOTS
 // SPAWN AT SCORE:
-let SPAWN_SCORE = 100;
+let SPAWN_SCORE = 500_000;
 
 const servers = ["na-4"];
 const botsPerServer = 150;
