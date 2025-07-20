@@ -2,7 +2,7 @@
 // SPAWN AT SCORE:
 let SPAWN_SCORE = 100;
 
-const servers = ["na-7"];
+const servers = ["na-4"];
 const botsPerServer = 150;
 
 const express = require("express");
