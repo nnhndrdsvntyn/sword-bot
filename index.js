@@ -27,7 +27,7 @@ function moveSmart(bot, targetX, targetY, self) {
     if (obs.type !== 1 && obs.type !== 3) continue;
 
     const size = obs.type === 1 ? 215 : 165;
-    const avoidRadius = size + 80;
+    const avoidRadius = size + 100;
 
     const ox = obs.x - self.b;
     const oy = obs.y - self.c;
