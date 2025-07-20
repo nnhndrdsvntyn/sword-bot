@@ -49,6 +49,7 @@ function moveToward(bot, targetX, targetY, p) {
 
   bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
   bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
+  bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 }); // DASH ALWAYS
 }
 
 const bots = [];
