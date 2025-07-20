@@ -1,3 +1,13 @@
+// FREE XP BOTS
+// SPAWN AT SCORE:
+let SPAWN_SCORE = 100;
+
+// SERVERS TO JOIN
+const servers = ["na-7"];
+
+// BOTS AMOUNT IN EACH SERVER
+const botsPerServer = 150;
+
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
@@ -11,11 +21,6 @@ app.listen(port, () => {
 });
 
 const io = require("socket.io-client");
-
-const servers = ["na-4"];
-const botsPerServer = 150;
-const autoRespawn = true;
-const autoAttack = true;
 
 function moveToward(bot, targetX, targetY, p) {
   let dx = targetX - p.b;
@@ -44,11 +49,9 @@ function moveToward(bot, targetX, targetY, p) {
 
   bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
   bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
-  bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 });
 }
 
 const bots = [];
-const roamData = [];
 
 const chatMessages = [
   "FREE XP!!!!",
@@ -60,7 +63,7 @@ const chatMessages = [
 
 servers.forEach((server) => {
   for (let i = 1; i <= botsPerServer; i++) {
-    botName = `${server.toUpperCase()} FREE XP!`;
+    const botName = `${server.toUpperCase()} FREE XP!`;
     const bot = {
       server,
       name: botName,
@@ -75,16 +78,10 @@ servers.forEach((server) => {
       messageCooldown: 0,
       lastMessageTime: 0,
       currentMessage: "",
+      lastTargetId: null,
     };
 
     bots.push(bot);
-
-    roamData.push({
-      bot,
-      x: Math.random() * 10000,
-      y: Math.random() * 10000,
-      nextChangeTime: Date.now() + 6000 + Math.random() * 4000,
-    });
 
     bot.socket = io(`https://${server}.swordonline.io`);
 
@@ -107,7 +104,6 @@ servers.forEach((server) => {
         obj.pausedTimer = obj.g === 1 ? 0 : oldPausedTimer;
         newPlayers[id] = obj;
       }
-
       bot.list.players = newPlayers;
       bot.list.npcs = {};
       bot.list.mobs = {};
@@ -125,26 +121,23 @@ servers.forEach((server) => {
   }
 });
 
+// Respawn if dead
 setInterval(() => {
-  if (!autoRespawn) return;
-
   for (const bot of bots) {
     const localPlayer = bot.list.players[bot.socket.id];
     if (!localPlayer) continue;
 
-    if (localPlayer.pausedTimer === 5 && localPlayer.e >= 500_000) {
+    if (localPlayer.pausedTimer === 5 && localPlayer.e >= SPAWN_SCORE) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
 }, 1000);
 
+// Main follow + message loop
 setInterval(() => {
-  if (!autoAttack) return;
-
   const allBotIds = new Set(bots.map((b) => b.socket.id));
 
-  for (let i = 0; i < bots.length; i++) {
-    const bot = bots[i];
+  for (const bot of bots) {
     const self = bot.list.players[bot.socket.id];
     if (!self) continue;
 
@@ -192,52 +185,17 @@ setInterval(() => {
         bot.lastMessageTime = now;
         bot.messageCooldown = 2000 + Math.floor(Math.random() * 3000);
       }
+
+      bot.lastTargetId = closest.a;
     } else {
-      const roam = roamData[i];
-      const dx = self.b - 5000;
-      const dy = self.c - 5000;
-      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      moveToward(bot, 5000, 5000, self);
 
-      if (distFromCenter > 1000) {
+      if (bot.lastTargetId !== null) {
         bot.socket.emit("keyPressX", {
           inputId: "chatMessage",
-          state: "⚡ Heading to center...",
+          state: "Going to center base... 📍",
         });
-
-        moveToward(bot, 5000, 5000, self);
-      } else {
-        if (now > roam.nextChangeTime) {
-          let newX, newY, valid;
-          do {
-            newX = Math.random() * 10000;
-            newY = Math.random() * 10000;
-            valid = true;
-
-            for (let j = 0; j < roamData.length; j++) {
-              if (i === j) continue;
-              const other = roamData[j];
-              if (other.bot.server !== bot.server) continue;
-
-              const dx = newX - other.x;
-              const dy = newY - other.y;
-              if (dx * dx + dy * dy < 100 * 100) {
-                valid = false;
-                break;
-              }
-            }
-          } while (!valid);
-
-          roam.x = newX;
-          roam.y = newY;
-          roam.nextChangeTime = now + 6000 + Math.random() * 4000;
-        }
-
-        bot.socket.emit("keyPressX", {
-          inputId: "chatMessage",
-          state: "👀 Looking for targets...",
-        });
-
-        moveToward(bot, roam.x, roam.y, self);
+        bot.lastTargetId = null;
       }
     }
   }
