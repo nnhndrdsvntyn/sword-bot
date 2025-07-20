@@ -134,9 +134,19 @@ setInterval(() => {
   }
 }, 1000);
 
-// Main follow + message loop
+// Main follow + shared target logic
 setInterval(() => {
   const allBotIds = new Set(bots.map((b) => b.socket.id));
+  const globalVisiblePlayers = [];
+
+  // Build shared list of visible players across all bots
+  for (const bot of bots) {
+    for (const player of Object.values(bot.list.players)) {
+      if (!allBotIds.has(player.a)) {
+        globalVisiblePlayers.push(player);
+      }
+    }
+  }
 
   for (const bot of bots) {
     const self = bot.list.players[bot.socket.id];
@@ -154,10 +164,7 @@ setInterval(() => {
     let closest = null;
     let minDistSq = Infinity;
 
-    for (const player of Object.values(bot.list.players)) {
-      if (player.a === bot.socket.id) continue;
-      if (allBotIds.has(player.a)) continue;
-
+    for (const player of globalVisiblePlayers) {
       const dx = player.b - self.b;
       const dy = player.c - self.c;
       const distSq = dx * dx + dy * dy;
