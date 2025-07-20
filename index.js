@@ -1,11 +1,9 @@
 // FREE XP BOTS
+// DASH ALWAYS
 // SPAWN AT SCORE:
 let SPAWN_SCORE = 100;
 
-// SERVERS TO JOIN
 const servers = ["na-7"];
-
-// BOTS AMOUNT IN EACH SERVER
 const botsPerServer = 150;
 
 const express = require("express");
@@ -15,63 +13,73 @@ const port = process.env.PORT || 3000;
 app.get("/", (req, res) => {
   res.send("Bot is running");
 });
-
 app.listen(port, () => {
   console.log(`Express server running on port ${port}`);
 });
 
 const io = require("socket.io-client");
 
-function moveToward(bot, targetX, targetY, self) {
-  let dx = targetX - self.b;
-  let dy = targetY - self.c;
-  let angle = Math.atan2(dy, dx);
-
-  const now = Date.now();
-
-  // Avoid obstacle if needed
-  let avoiding = false;
-
+function isBlocked(bot, self, targetX, targetY) {
   for (const obs of Object.values(bot.list.decorations)) {
     if (obs.type !== 1 && obs.type !== 3) continue;
 
     const size = obs.type === 1 ? 215 : 165;
-    const avoidRadius = size + 40;
+    const padding = size + 60;
 
-    const distX = obs.x - self.b;
-    const distY = obs.y - self.c;
-    const distSq = distX * distX + distY * distY;
+    const dx = obs.x - self.b;
+    const dy = obs.y - self.c;
+    const distSq = dx * dx + dy * dy;
 
-    if (distSq <= avoidRadius * avoidRadius) {
-      avoiding = true;
-
-      // Commit to a dodge direction based on relative angle
-      if (!bot.dodgeUntil || bot.dodgeUntil < now) {
-        const obsAngle = Math.atan2(distY, distX);
-        const angleDiff = angle - obsAngle;
-
-        const turnDir = angleDiff > 0 ? 1 : -1;
-
-        angle += turnDir * 1.8;
-        bot.dodgeUntil = now + 350; // commit to dodge for 350ms
-      } else {
-        // Still in dodge mode, don't update angle
-        return;
+    // Check if obstacle is close enough to block vision
+    if (distSq < padding * padding) {
+      // Basic directional check: is obstacle roughly between us and the target?
+      const midX = (self.b + targetX) / 2;
+      const midY = (self.c + targetY) / 2;
+      const offsetX = Math.abs(obs.x - midX);
+      const offsetY = Math.abs(obs.y - midY);
+      if (offsetX < padding && offsetY < padding) {
+        return true;
       }
-
-      break;
     }
   }
+  return false;
+}
 
-  // Only update angle when not in mid-dodge or no obstacle
-  if (!avoiding || (bot.dodgeUntil && bot.dodgeUntil <= now)) {
-    let degrees = (angle * 180) / Math.PI;
-    if (degrees < 0) degrees += 360;
+function moveSmart(bot, targetX, targetY, self) {
+  const now = Date.now();
 
-    bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
-    bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
-    bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 }); // DASH
+  const blocked = isBlocked(bot, self, targetX, targetY);
+
+  if (blocked) {
+    if (!bot.dodging || bot.dodgingUntil < now) {
+      // Pick simple detour direction based on relative position
+      const dx = targetX - self.b;
+      const dy = targetY - self.c;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        targetX = self.b;
+        targetY += dy > 0 ? 400 : -400;
+      } else {
+        targetX += dx > 0 ? 400 : -400;
+        targetY = self.c;
+      }
+
+      bot.dodgingUntil = now + 300;
+      bot.dodging = true;
+    }
+  } else {
+    bot.dodging = false;
   }
+
+  // Move toward adjusted target
+  let dx = targetX - self.b;
+  let dy = targetY - self.c;
+  let angle = Math.atan2(dy, dx);
+  let degrees = (angle * 180) / Math.PI;
+  if (degrees < 0) degrees += 360;
+
+  bot.socket.emit("keyPressX", { inputId: "mouseDistance", state: 1 });
+  bot.socket.emit("keyPressX", { inputId: "angle", state: degrees });
+  bot.socket.emit("keyPressX", { inputId: "rightButton", state: 1 }); // Dash
 }
 
 const bots = [];
@@ -92,8 +100,6 @@ servers.forEach((server) => {
       name: botName,
       list: {
         players: {},
-        npcs: {},
-        mobs: {},
         decorations: {},
       },
       hasInit: false,
@@ -102,7 +108,8 @@ servers.forEach((server) => {
       lastMessageTime: 0,
       currentMessage: "",
       lastTargetId: null,
-      dodgeUntil: 0,
+      dodging: false,
+      dodgingUntil: 0,
     };
 
     bots.push(bot);
@@ -129,8 +136,6 @@ servers.forEach((server) => {
         newPlayers[id] = obj;
       }
       bot.list.players = newPlayers;
-      bot.list.npcs = {};
-      bot.list.mobs = {};
     });
 
     setInterval(() => {
@@ -148,25 +153,24 @@ servers.forEach((server) => {
 // Respawn if dead
 setInterval(() => {
   for (const bot of bots) {
-    const localPlayer = bot.list.players[bot.socket.id];
-    if (!localPlayer) continue;
+    const self = bot.list.players[bot.socket.id];
+    if (!self) continue;
 
-    if (localPlayer.pausedTimer === 5 && localPlayer.e >= SPAWN_SCORE) {
+    if (self.pausedTimer === 5 && self.e >= SPAWN_SCORE) {
       bot.socket.emit("signInY", { username: bot.name });
     }
   }
 }, 1000);
 
-// Shared target + swarm follow
+// Shared target AI + chat loop
 setInterval(() => {
   const allBotIds = new Set(bots.map((b) => b.socket.id));
-  const globalVisiblePlayers = [];
+  const visiblePlayers = [];
 
-  // Shared visible players across all bots
   for (const bot of bots) {
     for (const player of Object.values(bot.list.players)) {
       if (!allBotIds.has(player.a)) {
-        globalVisiblePlayers.push(player);
+        visiblePlayers.push(player);
       }
     }
   }
@@ -187,7 +191,7 @@ setInterval(() => {
     let closest = null;
     let minDistSq = Infinity;
 
-    for (const player of globalVisiblePlayers) {
+    for (const player of visiblePlayers) {
       const dx = player.b - self.b;
       const dy = player.c - self.c;
       const distSq = dx * dx + dy * dy;
@@ -200,17 +204,16 @@ setInterval(() => {
     const now = Date.now();
 
     if (closest) {
-      moveToward(bot, closest.b, closest.c, self);
+      moveSmart(bot, closest.b, closest.c, self);
 
       if (now - bot.lastMessageTime > bot.messageCooldown) {
-        const messageTemplate =
-          chatMessages[Math.floor(Math.random() * chatMessages.length)];
+        const msg = chatMessages[Math.floor(Math.random() * chatMessages.length)];
         const dValue = closest.d || "";
-        bot.currentMessage = messageTemplate.replace("${dValue}", dValue);
+        const finalMsg = msg.replace("${dValue}", dValue);
 
         bot.socket.emit("keyPressX", {
           inputId: "chatMessage",
-          state: bot.currentMessage,
+          state: finalMsg,
         });
 
         bot.lastMessageTime = now;
@@ -219,7 +222,7 @@ setInterval(() => {
 
       bot.lastTargetId = closest.a;
     } else {
-      moveToward(bot, 5000, 5000, self);
+      moveSmart(bot, 5000, 5000, self);
 
       if (bot.lastTargetId !== null) {
         bot.socket.emit("keyPressX", {
