@@ -1,11 +1,11 @@
 // === CONFIG ===
-let BOT_Mode = "Free-XP"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
-let farmAdXP = true; // Toggle bonus XP farming
-let reconnect_aboveScore = false; // Reset bots if score > SPAWN_SCORE
+let BOT_Mode = "Find-Kill-NPCs-Players"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
+let farmAdXP = false; // Toggle bonus XP farming
+let reconnect_aboveScore = true; // Reset bots if score > SPAWN_SCORE
 
-const SPAWN_SCORE = 500_000;
-const servers = ["na-4"]
-const botsPerServer = 150;
+const SPAWN_SCORE = 10;
+const servers = ["na", "na-7", "na-2", "na-3", "na-4", "na-5", "na-6"];
+const botsPerServer = 50;
 
 // === EXPRESS SERVER ===
 const express = require("express");
@@ -19,6 +19,22 @@ const io = require("socket.io-client");
 
 const bots = [];
 const roamData = [];
+const skinNumbers = [
+  71, 38, 39, 40, 36, 37, 41, 42, 51, 52, 74, 75, 44, 46, 55, 56, 72, 73,
+];
+
+const heartColors = ["❤️", "🧡", "💛", "💚", "💙", "💜"];
+let chatColorIndex = 0;
+
+// === Love message options ===
+const loveMessages = [
+  "take my love",
+  "spreading love",
+  "get some love",
+  "free love",
+];
+let currentLoveMessage = loveMessages[0],
+  loveMessageSwitchTime = Date.now() + 5000;
 
 function getSwingDistance(h) {
   return h < 1 ? 150 : h > 35 ? 245 : 150 + (h - 1) * 10;
@@ -98,9 +114,14 @@ function getbonusXP(socket) {
 }
 
 function createBot(server, index) {
+  // Pick a random heart color for the username
+  const heart = heartColors[Math.floor(Math.random() * heartColors.length)];
+  // Pick a random skin number for this bot
+  const skin = skinNumbers[Math.floor(Math.random() * skinNumbers.length)];
   const bot = {
     server,
-    name: `${server.toUpperCase()} BOT #${index}`,
+    name: `Lib-Bot #${index} ${heart}`,
+    skin,
     list: {
       players: {},
       npcs: {},
@@ -123,9 +144,17 @@ function createBot(server, index) {
   const socket = io(`https://${server}.swordonline.io`);
   bot.socket = socket;
 
+  function sendSkin() {
+    setTimeout(() => {
+      socket.emit("buySkin", { number: bot.skin });
+      socket.emit("useItem", { number: bot.skin });
+    }, 1000);
+  }
   socket.on("connect", () => {
     socket.emit("gameModeReceived", { status: true });
+    sendSkin();
   });
+  // Removed socket.on("reconnect", sendSkin); as reconnect is handled by custom logic
 
   socket.on("init", (data) => {
     if (!bot.hasInit) {
@@ -178,6 +207,20 @@ setInterval(() => {
 }, 1000);
 
 // === Behavior Loop ===
+
+// === Chat message animation loop (100ms) ===
+setInterval(() => {
+  if (Date.now() > loveMessageSwitchTime) {
+    let prev = currentLoveMessage;
+    while (currentLoveMessage === prev && loveMessages.length > 1)
+      currentLoveMessage =
+        loveMessages[(Math.random() * loveMessages.length) | 0];
+    loveMessageSwitchTime = Date.now() + 5000;
+  }
+  chatColorIndex = (chatColorIndex + 1) % heartColors.length;
+}, 1);
+
+// === Main bot behavior loop (every tick) ===
 setInterval(() => {
   const now = Date.now();
   const allBotIDs = new Set(bots.map((b) => b.socket.id));
@@ -194,122 +237,90 @@ setInterval(() => {
   }
 
   for (let i = 0; i < bots.length; i++) {
-    const bot = bots[i];
-    const self = bot.list.players[bot.socket.id];
+    const bot = bots[i],
+      self = bot.list.players[bot.socket.id];
     if (!self) continue;
-
-    // === Reset bot if score exceeds limit ===
     if (reconnect_aboveScore && self.e > SPAWN_SCORE && !bot._queuedReset) {
       bot._queuedReset = true;
-
       setTimeout(() => {
-        const socket = bot.socket;
         const idx = bots.indexOf(bot);
         if (idx !== -1) bots.splice(idx, 1);
         const roamIdx = roamData.findIndex((r) => r.bot === bot);
         if (roamIdx !== -1) roamData.splice(roamIdx, 1);
-        socket.disconnect();
-
-        setTimeout(() => {
-          createBot(bot.server, i + 1);
-        }, 1000);
-      }, 500);
-
+        bot.socket.disconnect();
+        setTimeout(() => createBot(bot.server, i + 1), 1);
+      }, 1);
       continue;
     }
-
-    if (bot.bonusXPTimer >= 20) {
-      if (self.g === 0) getbonusXP(bot.socket);
-      bot.bonusXPTimer = 1;
-    } else {
-      bot.bonusXPTimer++;
-    }
-
+    bot.bonusXPTimer >= 20
+      ? (self.g === 0 && getbonusXP(bot.socket), (bot.bonusXPTimer = 1))
+      : bot.bonusXPTimer++;
+    let target = null,
+      targetIsPlayer = false,
+      minDistSq = 1 / 0;
     if (BOT_Mode === "Free-XP") {
-      let closest = null;
-      let minDistSq = Infinity;
       for (const player of globalPlayers) {
-        const dx = player.b - self.b;
-        const dy = player.c - self.c;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < minDistSq) {
-          minDistSq = distSq;
-          closest = player;
-        }
+        const dx = player.b - self.b,
+          dy = player.c - self.c,
+          distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq)
+          (minDistSq = distSq), (target = player), (targetIsPlayer = true);
       }
-
-      if (closest) {
-        moveSmartSimpleSteer(bot, closest.b, closest.c, self);
-      } else {
-        const roam = roamData[i];
-        const dx = roam.x - self.b;
-        const dy = roam.y - self.c;
-        const distSq = dx * dx + dy * dy;
-
-        if (distSq < 10000 || now > roam.nextChangeTime) {
-          roam.x = Math.random() * 10000;
-          roam.y = Math.random() * 10000;
-          roam.nextChangeTime = now + 6000 + Math.random() * 4000;
-        }
-
+      if (target) moveSmartSimpleSteer(bot, target.b, target.c, self);
+      else {
+        const roam = roamData[i],
+          dx = roam.x - self.b,
+          dy = roam.y - self.c,
+          distSq = dx * dx + dy * dy;
+        if (distSq < 10000 || now > roam.nextChangeTime)
+          (roam.x = Math.random() * 10000),
+            (roam.y = Math.random() * 10000),
+            (roam.nextChangeTime = now + 6000 + Math.random() * 4000);
         moveSmartSimpleSteer(bot, roam.x, roam.y, self);
       }
-
       bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
     } else if (BOT_Mode === "Find-Kill-NPCs-Players") {
-      let closest = null;
-      let minDistSq = Infinity;
-
       for (const npc of globalNPCs) {
-        const dx = npc.b - self.b;
-        const dy = npc.c - self.c;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < minDistSq) {
-          minDistSq = distSq;
-          closest = npc;
-        }
+        const dx = npc.b - self.b,
+          dy = npc.c - self.c,
+          distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq)
+          (minDistSq = distSq), (target = npc), (targetIsPlayer = false);
       }
-
       for (const player of globalPlayers) {
-        const dx = player.b - self.b;
-        const dy = player.c - self.c;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < minDistSq) {
-          minDistSq = distSq;
-          closest = player;
-        }
+        const dx = player.b - self.b,
+          dy = player.c - self.c,
+          distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq)
+          (minDistSq = distSq), (target = player), (targetIsPlayer = true);
       }
-
-      if (closest) {
-        moveSmartSimpleSteer(bot, closest.b, closest.c, self);
-        const swingDist = getSwingDistance(self.h);
-        const inSight = hasLineOfSight(
-          bot,
-          self.b,
-          self.c,
-          closest.b,
-          closest.c,
-        );
-        const swing = minDistSq <= swingDist * swingDist && inSight;
+      if (target) {
+        moveSmartSimpleSteer(bot, target.b, target.c, self);
+        const swingDist = getSwingDistance(self.h),
+          inSight = hasLineOfSight(bot, self.b, self.c, target.b, target.c),
+          swing = minDistSq <= swingDist * swingDist && inSight;
         bot.socket.emit("keyPressX", {
           inputId: "leftButton",
           state: swing ? 1 : 0,
         });
       } else {
-        const roam = roamData[i];
-        const dx = roam.x - self.b;
-        const dy = roam.y - self.c;
-        const distSq = dx * dx + dy * dy;
-
-        if (distSq < 10000 || now > roam.nextChangeTime) {
-          roam.x = Math.random() * 10000;
-          roam.y = Math.random() * 10000;
-          roam.nextChangeTime = now + 6000 + Math.random() * 4000;
-        }
-
+        const roam = roamData[i],
+          dx = roam.x - self.b,
+          dy = roam.y - self.c,
+          distSq = dx * dx + dy * dy;
+        if (distSq < 10000 || now > roam.nextChangeTime)
+          (roam.x = Math.random() * 10000),
+            (roam.y = Math.random() * 10000),
+            (roam.nextChangeTime = now + 6000 + Math.random() * 4000);
         moveSmartSimpleSteer(bot, roam.x, roam.y, self);
         bot.socket.emit("keyPressX", { inputId: "leftButton", state: 0 });
       }
     }
+    let msg = currentLoveMessage;
+    if (targetIsPlayer && target && target.d) msg = `come love, ${target.d}`;
+    bot.socket.emit("keyPressX", {
+      inputId: "chatMessage",
+      state: `${msg} ${heartColors[chatColorIndex]}`,
+    });
   }
-}, 250);
+}, 1000 / 30);
