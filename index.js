@@ -1,10 +1,10 @@
 // === CONFIG ===
 let BOT_Mode = "Find-Kill-NPCs-Players"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
-let farmAdXP = false; // Toggle bonus XP farming
-let reconnect_aboveScore = true; // Reset bots if score > SPAWN_SCORE
+let farmAdXP = true; // Toggle bonus XP farming
+let reconnect_aboveScore = false; // Reset bots if score > SPAWN_SCORE
 
-const SPAWN_SCORE = 10;
-const servers = ["na", "na-7", "na-2", "na-3", "na-4", "na-5", "na-6"];
+const SPAWN_SCORE = 500_000;
+const servers = ["na-3"];
 const botsPerServer = 50;
 
 // === EXPRESS SERVER ===
