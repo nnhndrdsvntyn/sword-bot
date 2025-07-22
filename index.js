@@ -1,11 +1,11 @@
 // === CONFIG ===
 let BOT_Mode = "Find-Kill-NPCs-Players"; // Options: 'Free-XP' or 'Find-Kill-NPCs-Players'
-let farmAdXP = true; // Toggle bonus XP farming
-let reconnect_aboveScore = false; // Reset bots if score > SPAWN_SCORE
+let farmAdXP = false; // Toggle bonus XP farming
+let reconnect_aboveScore = true; // Reset bots if score > SPAWN_SCORE
 
-const SPAWN_SCORE = 500_000;
+const SPAWN_SCORE = 10;
 const servers = ["na-3"];
-const botsPerServer = 50;
+const botsPerServer = 150;
 
 // === EXPRESS SERVER ===
 const express = require("express");
@@ -22,6 +22,8 @@ const roamData = [];
 const skinNumbers = [
   71, 38, 39, 40, 36, 37, 41, 42, 51, 52, 74, 75, 44, 46, 55, 56, 72, 73,
 ];
+const https = require("https");
+let safePlayers = [];
 
 const heartColors = ["❤️", "🧡", "💛", "💚", "💙", "💜"];
 let chatColorIndex = 0;
@@ -221,6 +223,27 @@ setInterval(() => {
 }, 1);
 
 // === Main bot behavior loop (every tick) ===
+
+function updateSafePlayers() {
+  https
+    .get(
+      "https://swordz-bots-follow-safe-default-rtdb.firebaseio.com/SAFE_PLAYERS.json",
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const obj = JSON.parse(data);
+            safePlayers = obj ? Object.keys(obj) : [];
+          } catch {}
+        });
+      },
+    )
+    .on("error", () => {});
+}
+
+setInterval(updateSafePlayers, 1);
+
 setInterval(() => {
   const now = Date.now();
   const allBotIDs = new Set(bots.map((b) => b.socket.id));
@@ -258,8 +281,10 @@ setInterval(() => {
     let target = null,
       targetIsPlayer = false,
       minDistSq = 1 / 0;
+    const ignoreSet = new Set(safePlayers);
     if (BOT_Mode === "Free-XP") {
       for (const player of globalPlayers) {
+        if (ignoreSet.has(player.a)) continue;
         const dx = player.b - self.b,
           dy = player.c - self.c,
           distSq = dx * dx + dy * dy;
@@ -288,6 +313,7 @@ setInterval(() => {
           (minDistSq = distSq), (target = npc), (targetIsPlayer = false);
       }
       for (const player of globalPlayers) {
+        if (ignoreSet.has(player.a)) continue;
         const dx = player.b - self.b,
           dy = player.c - self.c,
           distSq = dx * dx + dy * dy;
