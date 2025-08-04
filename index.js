@@ -1,6 +1,6 @@
 const io = require("socket.io-client");
 
-const TARGETS = ["na-8"];
+const TARGETS = ["na-6"];
 const ACCOUNTS = 40;
 const CANNONS_PER_TARGET = 50;
 const FIRE_DELAY = 10;
@@ -64,3 +64,4 @@ function fireOnce(target) {
 
 process.on("uncaughtException", () => {});
 process.on("unhandledRejection", () => {});
+
