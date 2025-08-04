@@ -11,7 +11,7 @@ const SERVERS = [
   "na-7",
   "na-8",
 ];
-const MAX_PER_SERVER = 180;
+const MAX_PER_SERVER = 10;
 const DELAY_MS = 1;
 
 let serverIndex = 0;
@@ -49,3 +49,4 @@ function sendPoll() {
 }
 
 sendPoll();
+
