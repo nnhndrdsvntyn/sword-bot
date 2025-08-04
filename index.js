@@ -1,6 +1,6 @@
 const https = require("https");
 
-const SERVERS = ["na", "na-7", "na-2", "na-3", "na-4", "na-5", "na-6", "na-7"];
+const SERVERS = ["na", "na-7", "na-2", "na-3", "na-4", "na-5", "na-6", "na-8"];
 const MAX_PER_SERVER = 180;
 const DELAY_MS = 1;
 
@@ -37,3 +37,4 @@ function sendPoll() {
 }
 
 sendPoll();
+
