@@ -1,6 +1,6 @@
 const { fork } = require("child_process");
 
-const TARGETS = ["na-3"]; // add more if you want
+const TARGETS = ["na-8"]; // add more if you want
 const INSTANCES_PER_TARGET = 2; // Increase to 5–10 per server if needed
 
 for (const target of TARGETS) {
@@ -8,3 +8,4 @@ for (const target of TARGETS) {
     fork("cannon.js", [target]);
   }
 }
+
