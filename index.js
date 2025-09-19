@@ -8,12 +8,10 @@ function startClient(id) {
         const sizeMB = (Buffer.byteLength(html) / (1024 * 1024)).toFixed(2);
       })
       .catch(() => {});
-  }, 1000);
+  }, 100);
 }
 
 // Start 10 clients
-for (let i = 1; i <= 100; i++) {
+for (let i = 1; i <= 10; i++) {
   startClient(i);
 }
-
-
